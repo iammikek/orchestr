@@ -24,6 +24,50 @@ export { Route } from './Facades/Route';
 
 // Providers
 export { RouteServiceProvider } from './Providers/RouteServiceProvider';
+export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
+
+// Database
+export { DatabaseManager } from './Database/DatabaseManager';
+export { Connection } from './Database/Connection';
+export { Builder as QueryBuilder } from './Database/Query/Builder';
+export { Expression, raw } from './Database/Query/Expression';
+export { DrizzleAdapter } from './Database/Adapters/DrizzleAdapter';
+
+// Database Facades
+export { DB } from './Facades/DB';
+
+// Ensemble ORM
+export { Ensemble } from './Database/Ensemble/Ensemble';
+export { EnsembleBuilder } from './Database/Ensemble/EnsembleBuilder';
+export { EnsembleCollection } from './Database/Ensemble/EnsembleCollection';
+export { softDeletes } from './Database/Ensemble/SoftDeletes';
+
+// Ensemble Types
+export type { HasAttributes, CastType, AttributeMutator, AttributeAccessor } from './Database/Ensemble/Concerns/HasAttributes';
+export type { HasTimestamps } from './Database/Ensemble/Concerns/HasTimestamps';
+export type { SoftDeletes } from './Database/Ensemble/SoftDeletes';
+
+// Database Types
+export type { DatabaseAdapter, DatabaseConfig, QueryResult } from './Database/Contracts/DatabaseAdapter';
+export type {
+  QueryBuilderInterface,
+  WhereOperator,
+  OrderDirection,
+  JoinType,
+  WhereClause,
+  JoinClause,
+  OrderByClause,
+} from './Database/Contracts/QueryBuilderInterface';
+export type {
+  Schema,
+  Blueprint,
+  ColumnDefinition,
+  ForeignKeyDefinition,
+} from './Database/Contracts/Schema';
+export type {
+  DatabaseManagerConfig,
+  DatabaseConnectionConfig,
+} from './Database/DatabaseManager';
 
 // Types
 export type { HttpMethod, RouteAction, Middleware } from './Routing/Route';
