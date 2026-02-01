@@ -22,6 +22,9 @@ export { Controller } from './Routing/Controller';
 export { Facade } from './Support/Facade';
 export { Route } from './Facades/Route';
 
+// Helpers
+export { loadRoutes, base_path, routes_path } from './Support/helpers';
+
 // Providers
 export { RouteServiceProvider } from './Providers/RouteServiceProvider';
 export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';

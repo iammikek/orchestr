@@ -120,12 +120,14 @@ export class Application extends Container {
   /**
    * Boot the application's service providers
    */
-  boot(): void {
+  async boot(): Promise<void> {
     if (this.booted) {
       return;
     }
 
-    this.serviceProviders.forEach(provider => this.bootProvider(provider));
+    for (const provider of this.serviceProviders) {
+      await this.bootProvider(provider);
+    }
 
     this.booted = true;
   }
@@ -133,9 +135,12 @@ export class Application extends Container {
   /**
    * Boot the given service provider
    */
-  private bootProvider(provider: ServiceProvider): void {
+  private async bootProvider(provider: ServiceProvider): Promise<void> {
     if (typeof provider.boot === 'function') {
-      this.call(provider.boot.bind(provider));
+      const result = this.call(provider.boot.bind(provider));
+      if (result instanceof Promise) {
+        await result;
+      }
     }
   }
 
