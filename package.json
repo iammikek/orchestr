@@ -1,6 +1,6 @@
 {
   "name": "@orchestr-sh/orchestr",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "dev": "tsx watch examples/basic-app/server.ts",
+    "dev": "tsx watch examples/basic-app/server.ts"
   },
   "keywords": [
     "laravel",
