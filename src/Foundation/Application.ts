@@ -1,5 +1,6 @@
 import { Container } from '../Container/Container';
 import { ServiceProvider } from './ServiceProvider';
+import { setGlobalApp } from '../Support/helpers';
 
 /**
  * Application class - Laravel's Illuminate\Foundation\Application
@@ -16,6 +17,9 @@ export class Application extends Container {
     this.basePath = basePath;
     this.registerBaseBindings();
     this.registerCoreContainerAliases();
+
+    // Set this as the global app instance for helper functions
+    setGlobalApp(this);
   }
 
   /**

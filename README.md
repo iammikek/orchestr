@@ -8,6 +8,7 @@ Built from the ground up with Laravel's core components:
 
 - **Service Container** - Full IoC container with dependency injection and reflection
 - **Service Providers** - Bootstrap and register services
+- **Configuration** - Dot-notation config repository with runtime access
 - **HTTP Router** - Laravel-style routing with parameter binding and file-based route loading
 - **Request/Response** - Elegant HTTP abstractions
 - **Middleware** - Global and route-level middleware pipeline
@@ -63,6 +64,67 @@ kernel.listen(3000);
 ```
 
 ## Core Concepts
+
+### Configuration
+
+Orchestr provides a Laravel-style configuration system with dot-notation access:
+
+```typescript
+import { Application, ConfigServiceProvider, Config, config } from 'orchestr';
+
+const app = new Application(__dirname);
+
+// Register configuration
+app.register(new ConfigServiceProvider(app, {
+  app: {
+    name: 'My Application',
+    env: 'production',
+    debug: false,
+    url: 'http://localhost:3000',
+  },
+  database: {
+    default: 'mysql',
+    connections: {
+      mysql: {
+        host: 'localhost',
+        port: 3306,
+        database: 'mydb',
+      }
+    }
+  }
+}));
+
+await app.boot();
+
+// Access via container
+const configInstance = app.make('config');
+const appName = configInstance.get('app.name'); // 'My Application'
+const dbHost = configInstance.get('database.connections.mysql.host'); // 'localhost'
+
+// Access via facade
+const name = Config.get('app.name');
+const debug = Config.get('app.debug', false); // with default
+
+// Access via helper function
+const env = config('app.env');
+const url = config('app.url', 'http://default.com');
+
+// Set configuration values
+Config.set('app.debug', true);
+Config.set({
+  'app.timezone': 'UTC',
+  'app.locale': 'en'
+});
+
+// Check if config exists
+if (Config.has('database.connections.mysql')) {
+  // ...
+}
+
+// Array operations
+Config.push('app.providers', 'NewServiceProvider');
+Config.prepend('app.middleware', 'LoggingMiddleware');
+```
 
 ### Service Container
 
@@ -885,6 +947,7 @@ Core components completed and in progress:
 
 - [x] Service Container & Dependency Injection
 - [x] Service Providers
+- [x] Configuration System
 - [x] HTTP Router & Route Files
 - [x] Request/Response
 - [x] Middleware Pipeline
@@ -918,6 +981,7 @@ Core components completed and in progress:
 |---------|---------|----------|
 | Service Container | ✅ | ✅        |
 | Service Providers | ✅ | ✅        |
+| Configuration | ✅ | ✅        |
 | Routing | ✅ | ✅        |
 | Route Files | ✅ | ✅        |
 | Middleware | ✅ | ✅        |

@@ -11,6 +11,8 @@ export { FormRequest } from './Foundation/Http/FormRequest';
 export { ValidationException } from './Foundation/Http/ValidationException';
 export { Validator } from './Foundation/Http/Validator';
 export type { ValidationRules, ValidationRule, ValidationRuleObject } from './Foundation/Http/Validator';
+export { Config as ConfigClass } from './Foundation/Config/Config';
+export { ConfigServiceProvider } from './Foundation/Config/ConfigServiceProvider';
 
 // Container
 export { Container } from './Container/Container';
@@ -25,6 +27,7 @@ export { Controller } from './Routing/Controller';
 // Facades
 export { Facade } from './Support/Facade';
 export { Route } from './Facades/Route';
+export { Config } from './Facades/Config';
 
 // Helpers
 export { loadRoutes, base_path, routes_path } from './Support/helpers';
@@ -32,6 +35,9 @@ export { loadRoutes, base_path, routes_path } from './Support/helpers';
 // Decorators
 export { Injectable } from './Support/Injectable';
 export { ValidateRequest } from './Support/ValidateRequest';
+
+// Helper function for config
+export { config } from './Support/helpers';
 
 // Providers
 export { RouteServiceProvider } from './Providers/RouteServiceProvider';
