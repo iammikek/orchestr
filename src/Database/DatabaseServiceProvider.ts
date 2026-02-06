@@ -14,7 +14,7 @@ export class DatabaseServiceProvider extends ServiceProvider {
    */
   register(): void {
     this.app.singleton('db', () => {
-      const config = (this.app.make('config') as any)?.database || {
+      const config = (this.app.make('config') as any).items?.database || {
         default: 'sqlite',
         connections: {
           sqlite: {

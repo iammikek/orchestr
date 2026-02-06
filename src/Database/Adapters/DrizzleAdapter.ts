@@ -8,6 +8,7 @@ import { DatabaseAdapter, DatabaseConfig, QueryResult } from '../Contracts/Datab
 
 export class DrizzleAdapter implements DatabaseAdapter {
   protected client: any;
+  protected rawClient: any;
   protected connected: boolean = false;
   protected inTransaction: boolean = false;
   protected transactionClient: any;
@@ -53,7 +54,7 @@ export class DrizzleAdapter implements DatabaseAdapter {
     const { drizzle } = await import('drizzle-orm/postgres-js');
     const postgres = await import('postgres');
 
-    const client = postgres.default({
+    const rawClient = postgres.default({
       host: this.config.host,
       port: this.config.port,
       database: this.config.database,
@@ -62,7 +63,8 @@ export class DrizzleAdapter implements DatabaseAdapter {
       max: this.config.poolMax || 10,
     });
 
-    this.client = drizzle(client);
+    this.rawClient = rawClient;
+    this.client = drizzle(rawClient);
   }
 
   /**
@@ -72,7 +74,7 @@ export class DrizzleAdapter implements DatabaseAdapter {
     const { drizzle } = await import('drizzle-orm/mysql2');
     const mysql = await import('mysql2/promise');
 
-    const connection = await mysql.createPool({
+    const rawClient = await mysql.createPool({
       host: this.config.host,
       port: this.config.port,
       database: this.config.database,
@@ -81,7 +83,8 @@ export class DrizzleAdapter implements DatabaseAdapter {
       connectionLimit: this.config.poolMax || 10,
     });
 
-    this.client = drizzle(connection);
+    this.rawClient = rawClient;
+    this.client = drizzle(rawClient);
   }
 
   /**
@@ -91,8 +94,9 @@ export class DrizzleAdapter implements DatabaseAdapter {
     const { drizzle } = await import('drizzle-orm/better-sqlite3');
     const Database = await import('better-sqlite3');
 
-    const client = new Database.default(this.config.database);
-    this.client = drizzle(client);
+    const rawClient = new Database.default(this.config.database);
+    this.rawClient = rawClient;
+    this.client = drizzle(rawClient);
   }
 
   /**
@@ -103,10 +107,26 @@ export class DrizzleAdapter implements DatabaseAdapter {
       return;
     }
 
-    // Drizzle doesn't require explicit disconnection
-    // But we'll mark as disconnected
+    // Close the raw client connection if possible
+    if (this.rawClient) {
+      switch (this.config.driver) {
+        case 'postgres':
+          await this.rawClient.end?.();
+          break;
+        case 'mysql':
+        case 'mysql2':
+          await this.rawClient.end?.();
+          break;
+        case 'better-sqlite3':
+        case 'sqlite':
+          this.rawClient.close?.();
+          break;
+      }
+    }
+
     this.connected = false;
     this.client = null;
+    this.rawClient = null;
   }
 
   /**
@@ -116,10 +136,28 @@ export class DrizzleAdapter implements DatabaseAdapter {
     this.ensureConnected();
 
     try {
-      const client = this.inTransaction ? this.transactionClient : this.client;
+      const client = this.inTransaction ? this.transactionClient : this.rawClient;
+      const boundSql = this.bindParameters(sql, bindings);
 
-      // Use the underlying SQL query capability
-      const result = await client.execute(this.bindParameters(sql, bindings));
+      let result: any;
+
+      // Execute based on driver type
+      switch (this.config.driver) {
+        case 'postgres':
+          result = await client.unsafe(boundSql);
+          break;
+        case 'mysql':
+        case 'mysql2':
+          const [rows] = await client.execute(boundSql);
+          result = rows;
+          break;
+        case 'better-sqlite3':
+        case 'sqlite':
+          result = client.prepare(boundSql).all();
+          break;
+        default:
+          throw new Error(`Unsupported database driver: ${this.config.driver}`);
+      }
 
       return {
         rows: Array.isArray(result) ? result : result.rows || [],
@@ -145,8 +183,27 @@ export class DrizzleAdapter implements DatabaseAdapter {
     this.ensureConnected();
 
     try {
-      const client = this.inTransaction ? this.transactionClient : this.client;
-      const result = await client.execute(this.bindParameters(sql, bindings));
+      const client = this.inTransaction ? this.transactionClient : this.rawClient;
+      const boundSql = this.bindParameters(sql, bindings);
+
+      let result: any;
+
+      // Execute based on driver type
+      switch (this.config.driver) {
+        case 'postgres':
+          result = await client.unsafe(boundSql);
+          break;
+        case 'mysql':
+        case 'mysql2':
+          [result] = await client.execute(boundSql);
+          break;
+        case 'better-sqlite3':
+        case 'sqlite':
+          result = client.prepare(boundSql).run();
+          break;
+        default:
+          throw new Error(`Unsupported database driver: ${this.config.driver}`);
+      }
 
       // Return the inserted ID
       return result.insertId || result.lastInsertRowid || result.rows?.[0]?.id;
