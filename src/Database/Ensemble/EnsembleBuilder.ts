@@ -79,6 +79,17 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   }
 
   /**
+   * Add a select statement to the query
+   */
+  addSelect(...columns: string[]): this {
+    if (this._columns.length === 1 && this._columns[0] === '*') {
+      this._columns = [];
+    }
+    this._columns.push(...columns);
+    return this;
+  }
+
+  /**
    * Set the relationships that should be eager loaded
    */
   with(relations: string | string[] | Record<string, (query: any) => void>): this {

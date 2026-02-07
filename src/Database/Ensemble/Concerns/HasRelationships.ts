@@ -10,6 +10,7 @@ import { Relation } from '../Relations/Relation';
 import { HasOne } from '../Relations/HasOne';
 import { HasMany } from '../Relations/HasMany';
 import { BelongsTo } from '../Relations/BelongsTo';
+import { BelongsToMany } from '../Relations/BelongsToMany';
 
 export interface RelationshipConfig {
   type: 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany' | 'hasOneThrough' | 'hasManyThrough' | 'morphTo' | 'morphMany' | 'morphOne' | 'morphToMany' | 'morphedByMany';
@@ -92,6 +93,64 @@ export abstract class HasRelationshipsMixin {
       finalOwnerKey,
       relationName
     );
+  }
+
+  /**
+   * Define a many-to-many relationship
+   */
+  protected belongsToMany<TRelated extends Ensemble>(
+    related: new () => TRelated,
+    table?: string,
+    foreignPivotKey?: string,
+    relatedPivotKey?: string,
+    parentKey?: string,
+    relatedKey?: string,
+    relation?: string
+  ): BelongsToMany<TRelated, any> {
+    const instance = new related();
+
+    // If no table name was provided, use the default
+    if (!table) {
+      table = this.joiningTable(instance);
+    }
+
+    // Get the foreign key for the parent model
+    foreignPivotKey = foreignPivotKey || this.getForeignKey();
+
+    // Get the foreign key for the related model
+    relatedPivotKey = relatedPivotKey || instance.getForeignKey();
+
+    // Get the parent key
+    const finalParentKey = parentKey || (this as any).getKeyName();
+
+    // Get the related key
+    const finalRelatedKey = relatedKey || instance.getKeyName();
+
+    return new BelongsToMany<TRelated, any>(
+      instance.newQuery() as EnsembleBuilder<TRelated>,
+      this as any,
+      table,
+      foreignPivotKey,
+      relatedPivotKey,
+      finalParentKey,
+      finalRelatedKey,
+      relation || ''
+    );
+  }
+
+  /**
+   * Get the joining table name for a many-to-many relation
+   */
+  protected joiningTable(related: Ensemble): string {
+    const models = [
+      this.snake((this as any).constructor.name),
+      this.snake(related.constructor.name),
+    ];
+
+    // Sort the model names alphabetically
+    models.sort();
+
+    return models.join('_');
   }
 
   /**

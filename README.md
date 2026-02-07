@@ -16,7 +16,7 @@ Built from the ground up with Laravel's core components:
 - **FormRequest** - Laravel-style validation and authorization
 - **Facades** - Static proxy access to services (Route, DB)
 - **Query Builder** - Fluent database query builder with full Laravel API
-- **Ensemble ORM** - ActiveRecord ORM (Laravel's Eloquent equivalent) with relationships (HasOne, HasMany, BelongsTo), eager/lazy loading, soft deletes, and more
+- **Ensemble ORM** - ActiveRecord ORM (Laravel's Eloquent equivalent) with relationships (HasOne, HasMany, BelongsTo, BelongsToMany), eager/lazy loading, soft deletes, and more
 - **Database Manager** - Multi-connection database management
 - **Application Lifecycle** - Complete Laravel bootstrap process
 
@@ -576,7 +576,7 @@ await DB.table('users')
 ActiveRecord ORM (Eloquent equivalent) with relationships and advanced features:
 
 ```typescript
-import { Ensemble, HasOne, HasMany, BelongsTo, softDeletes } from 'orchestr';
+import { Ensemble, HasOne, HasMany, BelongsTo, BelongsToMany, softDeletes } from 'orchestr';
 
 // Define models with relationships
 class User extends Ensemble {
@@ -596,6 +596,13 @@ class User extends Ensemble {
   // One-to-Many: User has many posts
   posts(): HasMany<Post, User> {
     return this.hasMany(Post);
+  }
+
+  // Many-to-Many: User has many roles
+  roles(): BelongsToMany<Role, User> {
+    return this.belongsToMany(Role, 'role_user')
+      .withPivot('expires_at', 'granted_by')
+      .withTimestamps();
   }
 }
 
@@ -619,6 +626,20 @@ class Post extends Ensemble {
   // One-to-Many: Post has many comments
   comments(): HasMany<Comment, Post> {
     return this.hasMany(Comment);
+  }
+
+  // Many-to-Many: Post has many tags
+  tags(): BelongsToMany<Tag, Post> {
+    return this.belongsToMany(Tag);
+  }
+}
+
+class Role extends Ensemble {
+  protected table = 'roles';
+
+  // Many-to-Many: Role has many users (inverse)
+  users(): BelongsToMany<User, Role> {
+    return this.belongsToMany(User, 'role_user', 'role_id', 'user_id');
   }
 }
 
@@ -653,6 +674,36 @@ const post = await user.posts().create({
 const post = new Post();
 post.author().associate(user);
 await post.save();
+
+// Many-to-Many operations
+const user = await User.find(1);
+
+// Attach roles
+await user.roles().attach([1, 2, 3]);
+await user.roles().attach(1, {
+  expires_at: new Date('2025-12-31'),
+  granted_by: 'admin'
+});
+
+// Detach roles
+await user.roles().detach([1, 2]);
+await user.roles().detach(); // detach all
+
+// Sync roles (detach all existing, attach new)
+const changes = await user.roles().sync([1, 2, 3]);
+
+// Toggle roles (attach if not attached, detach if attached)
+await user.roles().toggle([1, 2, 3]);
+
+// Query with pivot constraints
+const activeRoles = await user.roles()
+  .wherePivot('expires_at', '>', new Date())
+  .get();
+
+// Update pivot data
+await user.roles().updateExistingPivot(1, {
+  expires_at: new Date('2027-12-31')
+});
 
 // Create
 const user = new User();
@@ -725,7 +776,68 @@ console.log(user.full_name); // Uses accessor
 user.password = 'secret123'; // Uses mutator
 ```
 
-**See [RELATIONSHIPS.md](./RELATIONSHIPS.md) for complete relationship documentation.**
+#### Many-to-Many Relationships
+
+Orchestr provides full support for many-to-many relationships with pivot table management, exactly like Laravel:
+
+```typescript
+class User extends Ensemble {
+  // Define many-to-many relationship
+  roles(): BelongsToMany<Role, User> {
+    return this.belongsToMany(Role, 'role_user')
+      .withPivot('expires_at', 'granted_by')  // Additional pivot columns
+      .withTimestamps();                       // Auto-manage timestamps
+  }
+}
+
+const user = await User.find(1);
+
+// Attach roles
+await user.roles().attach([1, 2, 3]);
+await user.roles().attach(1, { expires_at: new Date('2025-12-31') });
+
+// Detach roles
+await user.roles().detach([1, 2]);
+
+// Sync (detach all, attach new)
+const { attached, detached, updated } = await user.roles().sync([1, 2, 3]);
+
+// Toggle (attach if not present, detach if present)
+await user.roles().toggle([1, 2]);
+
+// Query with pivot constraints
+const activeRoles = await user.roles()
+  .wherePivot('expires_at', '>', new Date())
+  .wherePivotNotNull('granted_by')
+  .get();
+
+// Update pivot data
+await user.roles().updateExistingPivot(1, {
+  expires_at: new Date('2027-12-31')
+});
+
+// Eager load with pivot data
+const users = await User.query()
+  .with({
+    roles: (query) => query.wherePivot('active', true)
+  })
+  .get();
+
+// Access pivot data
+const roles = await user.roles().get();
+const pivot = roles[0].getRelation('pivot');
+// { user_id, role_id, expires_at, granted_by, created_at, updated_at }
+```
+
+**Features:**
+- ✅ Automatic pivot table naming (alphabetically sorted model names)
+- ✅ Attach/detach/sync/toggle operations
+- ✅ Pivot table queries (wherePivot, wherePivotIn, wherePivotNull, etc.)
+- ✅ Additional pivot columns with `withPivot()`
+- ✅ Automatic pivot timestamps with `withTimestamps()`
+- ✅ Custom pivot accessor with `as()`
+- ✅ Update pivot data with `updateExistingPivot()`
+- ✅ Full eager loading support
 
 ### Database Setup
 
@@ -913,7 +1025,8 @@ src/
 │   │   │   ├── Relation.ts       # Base relation class
 │   │   │   ├── HasOne.ts         # One-to-one relationship
 │   │   │   ├── HasMany.ts        # One-to-many relationship
-│   │   │   └── BelongsTo.ts      # Inverse relationship
+│   │   │   ├── BelongsTo.ts      # Inverse relationship
+│   │   │   └── BelongsToMany.ts  # Many-to-many relationship
 │   │   └── Concerns/
 │   │       ├── HasAttributes.ts  # Attribute handling & casting
 │   │       ├── HasTimestamps.ts  # Timestamp management
@@ -959,9 +1072,9 @@ Core components completed and in progress:
 - [x] Soft Deletes
 - [x] Model Attributes & Casting
 - [x] Model Relationships (HasOne, HasMany, BelongsTo)
+- [x] Many-to-Many Relationships (BelongsToMany)
 - [x] Eager/Lazy Loading
 - [x] FormRequest Validation & Authorization
-- [ ] Many-to-Many Relationships (BelongsToMany)
 - [ ] Relationship Queries (has, whereHas, withCount)
 - [ ] Polymorphic Relationships
 - [ ] Database Migrations
@@ -995,7 +1108,7 @@ Core components completed and in progress:
 | Attribute Casting | ✅ | ✅        |
 | Basic Relationships | ✅ | ✅        |
 | Eager/Lazy Loading | ✅ | ✅        |
-| Many-to-Many | ✅ | 🚧       |
+| Many-to-Many | ✅ | ✅        |
 | Polymorphic Relations | ✅ | 🚧       |
 | Migrations | ✅ | 🚧       |
 | Seeding | ✅ | 🚧       |
