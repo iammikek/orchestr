@@ -41,6 +41,50 @@ function createRelationshipProxy(relation: any): any {
 }
 
 /**
+ * List of method prefixes that should never be treated as relationships
+ */
+const EXCLUDED_PREFIXES = [
+  'get', 'set', 'is', 'has', 'should', 'can',
+  'fill', 'save', 'delete', 'update', 'create',
+  'find', 'where', 'with', 'load', 'fresh',
+  'toObject', 'toJSON', 'toString', 'valueOf'
+];
+
+/**
+ * List of known internal methods that should never be treated as relationships
+ */
+const EXCLUDED_METHODS = [
+  'constructor', 'getTable', 'getKeyName', 'getKey', 'getAttribute',
+  'setAttribute', 'newQuery', 'newInstance', 'getConnection',
+  'query', 'getDirty', 'relationLoaded', 'getRelation', 'setRelation',
+  'syncOriginal', 'refresh', 'touch', 'makeHidden', 'makeVisible'
+];
+
+/**
+ * Check if a method name should be excluded from dynamic relation detection
+ */
+function shouldExcludeMethod(methodName: string): boolean {
+  // Exclude if in the excluded methods list
+  if (EXCLUDED_METHODS.includes(methodName)) {
+    return true;
+  }
+
+  // Exclude if it starts with an underscore (private/internal)
+  if (methodName.startsWith('_')) {
+    return true;
+  }
+
+  // Exclude if it starts with any excluded prefix
+  for (const prefix of EXCLUDED_PREFIXES) {
+    if (methodName.startsWith(prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Wrap an Ensemble instance with a Proxy that automatically resolves relationships
  */
 export function withDynamicRelations<T extends object>(instance: T): T {
@@ -59,6 +103,11 @@ export function withDynamicRelations<T extends object>(instance: T): T {
 
       // If it's not a function, return as-is
       if (typeof value !== 'function') {
+        return value;
+      }
+
+      // Exclude methods that should never be treated as relationships
+      if (shouldExcludeMethod(property)) {
         return value;
       }
 
@@ -89,7 +138,7 @@ export function withDynamicRelations<T extends object>(instance: T): T {
         }
       } catch (e) {
         // If calling the method fails, just return the original function
-        // This handles cases where the method requires parameters
+        // This handles cases where the method requires parameters or has side effects
       }
 
       // Return the original value for non-relationship properties
