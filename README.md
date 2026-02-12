@@ -218,6 +218,140 @@ const allPosts = await user.posts;
 
 Without `@DynamicRelation`, you must always call the method: `user.posts().get()`.
 
+## Migrations
+
+Laravel-style migrations with a fluent Schema builder.
+
+```bash
+# Create a migration
+orchestr make:migration create_users_table --create=users
+
+# Run migrations
+orchestr migrate
+
+# Rollback last batch
+orchestr migrate:rollback
+
+# Rollback all migrations
+orchestr migrate:reset
+
+# Drop all tables and re-run migrations
+orchestr migrate:fresh
+
+# Rollback and re-run all migrations
+orchestr migrate:refresh
+
+# Check migration status
+orchestr migrate:status
+```
+
+### Creating Tables
+
+```typescript
+import { Migration, Schema } from '@orchestr-sh/orchestr';
+
+export default class extends Migration {
+  async up(schema: Schema): Promise<void> {
+    await schema.create('users', (table) => {
+      table.id();
+      table.string('name');
+      table.string('email').unique();
+      table.string('password');
+      table.rememberToken();
+      table.timestamps();
+    });
+  }
+
+  async down(schema: Schema): Promise<void> {
+    await schema.dropIfExists('users');
+  }
+}
+```
+
+### Column Types
+
+```typescript
+table.id()                          // Auto-incrementing big integer
+table.string('name', 255)           // VARCHAR
+table.text('bio')                   // TEXT
+table.integer('votes')              // INTEGER
+table.bigInteger('amount')          // BIGINT
+table.decimal('price', 8, 2)        // DECIMAL
+table.boolean('active')             // BOOLEAN
+table.date('birth_date')            // DATE
+table.datetime('published_at')      // DATETIME
+table.timestamp('created_at')       // TIMESTAMP
+table.timestamps()                  // created_at & updated_at
+table.json('metadata')              // JSON
+table.uuid('identifier')            // UUID
+table.enum('status', ['draft', 'published'])
+```
+
+### Column Modifiers
+
+```typescript
+table.string('email').nullable()
+table.string('email').unique()
+table.string('email').default('guest@example.com')
+table.integer('votes').unsigned()
+table.string('email').index()
+```
+
+### Foreign Keys
+
+```typescript
+table.bigInteger('user_id').unsigned();
+table.foreign('user_id').references('id').on('users').onDelete('cascade');
+```
+
+## Seeders
+
+Populate your database with test or initial data.
+
+```bash
+# Create a seeder
+orchestr make:seeder UserSeeder
+
+# Run all seeders (runs DatabaseSeeder)
+orchestr db:seed
+
+# Run a specific seeder
+orchestr db:seed --class=UserSeeder
+```
+
+### Creating Seeders
+
+```typescript
+import { Seeder } from '@orchestr-sh/orchestr';
+
+export default class UserSeeder extends Seeder {
+  async run(): Promise<void> {
+    await this.connection?.table('users').insert([
+      { name: 'John Doe', email: 'john@example.com' },
+      { name: 'Jane Smith', email: 'jane@example.com' },
+    ]);
+  }
+}
+```
+
+### DatabaseSeeder Pattern
+
+```typescript
+import { Seeder } from '@orchestr-sh/orchestr';
+import UserSeeder from './UserSeeder';
+import PostSeeder from './PostSeeder';
+
+export default class DatabaseSeeder extends Seeder {
+  async run(): Promise<void> {
+    await this.call(UserSeeder);
+    await this.call(PostSeeder);
+
+    // Or call multiple seeders at once
+    await this.callMany([UserSeeder, PostSeeder]);
+  }
+}
+```
+
 ## Controllers
 
 ```typescript
@@ -365,6 +499,49 @@ user.toObject()           // Convert to plain object
 .max(column)
 ```
 
+### Schema Methods
+
+```typescript
+schema.create(table, callback)      // Create new table
+schema.table(table, callback)       // Modify existing table
+schema.drop(table)                  // Drop table
+schema.dropIfExists(table)          // Drop table if exists
+schema.rename(from, to)             // Rename table
+schema.hasTable(table)              // Check if table exists
+schema.hasColumn(table, column)     // Check if column exists
+```
+
+### Blueprint Column Types
+
+```typescript
+table.id()                          // Auto-increment big integer
+table.increments(column)            // Auto-increment integer
+table.bigIncrements(column)         // Auto-increment big integer
+table.string(column, length)        // VARCHAR
+table.text(column)                  // TEXT
+table.mediumText(column)            // MEDIUMTEXT
+table.longText(column)              // LONGTEXT
+table.integer(column)               // INTEGER
+table.bigInteger(column)            // BIGINT
+table.smallInteger(column)          // SMALLINT
+table.tinyInteger(column)           // TINYINT
+table.decimal(column, precision, scale)
+table.float(column, precision, scale)
+table.double(column, precision, scale)
+table.boolean(column)               // BOOLEAN
+table.date(column)                  // DATE
+table.datetime(column, precision)   // DATETIME
+table.timestamp(column, precision)  // TIMESTAMP
+table.timestamps(precision)         // created_at & updated_at
+table.json(column)                  // JSON
+table.jsonb(column)                 // JSONB
+table.uuid(column)                  // UUID
+table.enum(column, values)          // ENUM
+table.binary(column)                // BINARY
+table.rememberToken()               // remember_token VARCHAR(100)
+table.softDeletes(column)           // deleted_at timestamp
+```
+
 ### Relationship Methods
 
 ```typescript
@@ -400,6 +577,26 @@ user.toObject()           // Convert to plain object
 - `MorphToMany` - Polymorphic many-to-many
 - `MorphedByMany` - Inverse of MorphToMany
 
+### CLI Commands
+
+```bash
+# Migrations
+orchestr make:migration <name>          # Create migration
+orchestr make:migration <name> --create=<table>  # Create table migration
+orchestr make:migration <name> --table=<table>   # Update table migration
+orchestr migrate                        # Run migrations
+orchestr migrate:rollback               # Rollback last batch
+orchestr migrate:reset                  # Rollback all migrations
+orchestr migrate:refresh                # Reset and re-run migrations
+orchestr migrate:fresh                  # Drop all tables and migrate
+orchestr migrate:status                 # Show migration status
+
+# Seeders
+orchestr make:seeder <name>             # Create seeder
+orchestr db:seed                        # Run DatabaseSeeder
+orchestr db:seed --class=<name>         # Run specific seeder
+```
+
 ## Features
 
 - ✅ Service Container & Dependency Injection
@@ -411,6 +608,8 @@ user.toObject()           // Convert to plain object
 - ✅ Ensemble ORM (ActiveRecord)
 - ✅ Relationships (Standard + Polymorphic)
 - ✅ Eager/Lazy Loading
+- ✅ Migrations with Schema Builder
+- ✅ Database Seeders
 - ✅ Soft Deletes
 - ✅ Attribute Casting
 - ✅ Timestamps

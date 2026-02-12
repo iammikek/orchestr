@@ -87,6 +87,37 @@ export type { HasTimestamps } from './Database/Ensemble/Concerns/HasTimestamps';
 export type { SoftDeletes } from './Database/Ensemble/SoftDeletes';
 export type { RelationshipConfig } from './Database/Ensemble/Concerns/HasRelationships';
 
+// Database Migrations
+export { Migration } from './Database/Migrations/Migration';
+export { MigrationRepository } from './Database/Migrations/MigrationRepository';
+export { Migrator } from './Database/Migrations/Migrator';
+export { MigrationCreator } from './Database/Migrations/MigrationCreator';
+export { SchemaBuilder } from './Database/Migrations/SchemaBuilder';
+export { Blueprint as BlueprintBuilder } from './Database/Migrations/Blueprint';
+export { ColumnDefinition as ColumnDefinitionBuilder } from './Database/Migrations/ColumnDefinition';
+export { ForeignKeyDefinition as ForeignKeyDefinitionBuilder } from './Database/Migrations/ForeignKeyDefinition';
+
+// Database Seeders
+export { Seeder } from './Database/Seeders/Seeder';
+export { SeederRunner } from './Database/Seeders/SeederRunner';
+
+// Console
+export { Command } from './Console/Command';
+export { ConsoleKernel } from './Console/ConsoleKernel';
+
+// Console Commands - Migrations
+export { MigrateCommand } from './Console/Commands/MigrateCommand';
+export { MigrateRollbackCommand } from './Console/Commands/MigrateRollbackCommand';
+export { MigrateResetCommand } from './Console/Commands/MigrateResetCommand';
+export { MigrateRefreshCommand } from './Console/Commands/MigrateRefreshCommand';
+export { MigrateFreshCommand } from './Console/Commands/MigrateFreshCommand';
+export { MigrateStatusCommand } from './Console/Commands/MigrateStatusCommand';
+export { MakeMigrationCommand } from './Console/Commands/MakeMigrationCommand';
+
+// Console Commands - Seeders
+export { SeedCommand } from './Console/Commands/SeedCommand';
+export { MakeSeederCommand } from './Console/Commands/MakeSeederCommand';
+
 // Database Types
 export type { DatabaseAdapter, DatabaseConfig, QueryResult } from './Database/Contracts/DatabaseAdapter';
 export type {
@@ -108,6 +139,11 @@ export type {
   DatabaseManagerConfig,
   DatabaseConnectionConfig,
 } from './Database/DatabaseManager';
+
+// Console Types
+export type { CommandOptions } from './Console/Command';
+export type { MigrationOptions } from './Database/Migrations/Migrator';
+export type { MigrationData } from './Database/Migrations/MigrationRepository';
 
 // Types
 export type { HttpMethod, RouteAction, Middleware } from './Routing/Route';
