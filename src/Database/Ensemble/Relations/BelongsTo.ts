@@ -200,6 +200,15 @@ export class BelongsTo<TRelated extends Ensemble, TParent extends Ensemble> exte
   }
 
   /**
+   * Execute the query as a "select" statement
+   * Override base to return single model instead of array
+   */
+  // @ts-ignore - BelongsTo returns single model, not array
+  async get(): Promise<TRelated | null> {
+    return this.getResults();
+  }
+
+  /**
    * Update the parent model on the relationship
    */
   async update(attributes: Record<string, any>): Promise<number> {

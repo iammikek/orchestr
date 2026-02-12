@@ -9,7 +9,6 @@ import { DatabaseManager } from '../DatabaseManager';
 import { Connection } from '../Connection';
 import { EnsembleBuilder } from './EnsembleBuilder';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
-import { withDynamicRelations } from './Concerns/HasDynamicRelations';
 
 export abstract class Ensemble extends HasRelationshipsMixin {
   /**
@@ -130,10 +129,6 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       // When creating manually, respect fillable/guarded
       this.fill(attributes);
     }
-
-    // Always return a proxied instance
-    // The proxy will check the dynamicRelations flag at runtime
-    return withDynamicRelations(this);
   }
 
   /**

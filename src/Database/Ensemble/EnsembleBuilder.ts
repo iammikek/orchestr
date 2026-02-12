@@ -8,7 +8,7 @@ import { Builder as QueryBuilder } from '../Query/Builder';
 import { DatabaseAdapter } from '../Contracts/DatabaseAdapter';
 import { Ensemble } from './Ensemble';
 import { EnsembleCollection } from './EnsembleCollection';
-import { Relation } from './Relations/Relation';
+import { Relation } from './Relations';
 
 export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
@@ -52,11 +52,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Get the first record
    */
   async first(): Promise<T | null> {
-    const result = await super.first();
-    if (!result) {
-      return null;
-    }
-    return this.newModelInstance(result, true);
+    const results = await this.limit(1).get();
+    return results[0] || null;
   }
 
   /**

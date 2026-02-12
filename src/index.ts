@@ -64,6 +64,14 @@ export { Relation, HasOne, HasMany, BelongsTo } from './Database/Ensemble/Relati
 
 // Ensemble Concerns
 export { HasRelationshipsMixin } from './Database/Ensemble/Concerns/HasRelationships';
+export { DynamicRelation, defineDynamicRelation } from './Database/Ensemble/Concerns/HasDynamicRelations';
+export type {
+  DynamicRelationAccessor,
+  BelongsToAccessor,
+  HasOneAccessor,
+  HasManyAccessor,
+  BelongsToManyAccessor
+} from './Database/Ensemble/Concerns/HasDynamicRelations';
 
 // Ensemble Types
 export type { HasAttributes, CastType, AttributeMutator, AttributeAccessor } from './Database/Ensemble/Concerns/HasAttributes';
