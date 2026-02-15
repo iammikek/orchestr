@@ -343,8 +343,18 @@ export class Dispatcher implements DispatcherContract {
       return this.createClassListener(listener, wildcard);
     }
 
-    // If it's a function (closure), return as-is
+    // If it's a function/class constructor
     if (typeof listener === 'function') {
+      // Check if it's a class constructor (has prototype with handle method)
+      if (listener.prototype && typeof listener.prototype.handle === 'function') {
+        // It's a class constructor, instantiate and call handle
+        return (event: Event, ...payload: any[]) => {
+          const instance = new (listener as any)();
+          return instance.handle(event);
+        };
+      }
+
+      // It's a regular function (closure), return as-is
       return listener;
     }
 
