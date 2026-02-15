@@ -6,6 +6,7 @@
 
 // Core Event Classes
 export { Event } from './Event';
+export type { EventClass } from './Event';
 export { Dispatcher } from './Dispatcher';
 export { EventServiceProvider } from './EventServiceProvider';
 

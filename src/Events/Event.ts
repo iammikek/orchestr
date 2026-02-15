@@ -295,3 +295,28 @@ export abstract class Event {
 // Apply Dispatchable mixin to Event class
 import { applyDispatchable } from './Concerns/Dispatchable';
 applyDispatchable(Event);
+
+/**
+ * Type helper for Event classes with static dispatch methods
+ *
+ * Use this to get proper typing for your event classes:
+ * @example
+ * ```typescript
+ * class UserRegistered extends Event {
+ *   constructor(public user: User) {
+ *     super();
+ *   }
+ * }
+ *
+ * // TypeScript will recognize these:
+ * UserRegistered.dispatch(user);
+ * UserRegistered.dispatchIf(condition, user);
+ * ```
+ */
+export type EventClass<T extends Event = Event> = typeof Event & {
+  new (...args: any[]): T;
+  dispatch(...args: any[]): any[];
+  dispatchIf(condition: boolean | (() => boolean), ...args: any[]): any[];
+  dispatchUnless(condition: boolean | (() => boolean), ...args: any[]): any[];
+  until(...args: any[]): any;
+};
