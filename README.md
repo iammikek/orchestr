@@ -858,6 +858,670 @@ npx orchestr make:listener <name> --queued  # Create queued listener
 npx orchestr event:list                     # List all registered events
 npx orchestr event:cache                    # Cache discovered events
 npx orchestr event:clear                    # Clear event cache
+
+# Queue - Jobs
+npx orchestr make:job <name>                # Create job class
+npx orchestr make:job <name> --sync         # Create synchronous job
+
+# Queue - Workers
+npx orchestr queue:work [connection]        # Start queue worker daemon
+npx orchestr queue:work --once              # Process single job and exit
+npx orchestr queue:work --queue=high,default  # Process specific queues
+npx orchestr queue:work --tries=3           # Set max attempts
+npx orchestr queue:work --timeout=90        # Set job timeout
+npx orchestr queue:work --sleep=3           # Seconds between checks
+npx orchestr queue:work --max-jobs=1000     # Stop after N jobs
+npx orchestr queue:work --max-time=3600     # Stop after N seconds
+npx orchestr queue:work --memory=128        # Memory limit in MB
+npx orchestr queue:work --rest=0            # Rest between jobs (ms)
+npx orchestr queue:work --stop-when-empty   # Stop when queue is empty
+npx orchestr queue:restart                  # Gracefully restart all workers
+
+# Queue - Failed Jobs
+npx orchestr queue:failed                   # List all failed jobs
+npx orchestr queue:retry <id>               # Retry specific failed job
+npx orchestr queue:retry all                # Retry all failed jobs
+npx orchestr queue:forget <id>              # Delete failed job by ID
+npx orchestr queue:flush                    # Delete all failed jobs
+npx orchestr queue:prune-failed --hours=48  # Prune failed jobs older than N hours
+
+# Queue - Monitoring
+npx orchestr queue:monitor <queue> --max=100  # Alert if queue exceeds size
+npx orchestr queue:clear [connection] --queue=default  # Clear queue
+
+# Queue - Database Setup
+npx orchestr queue:table                    # Create jobs table migration
+npx orchestr queue:failed-table             # Create failed_jobs table migration
+npx orchestr queue:batches-table            # Create job_batches table migration
+npx orchestr queue:prune-batches --hours=24 # Prune batches older than N hours
+
+# Cache
+npx orchestr cache:clear [--store=redis]    # Clear all cache or specific store
+npx orchestr cache:forget <key> [--store=redis]  # Forget specific cache key
+npx orchestr cache:table                    # Create cache table migration
+```
+
+## Queue System
+
+Orchestr provides a powerful queue system for deferring time-intensive tasks. Jobs can be pushed to various drivers (sync, database), retried on failure, organized into chains and batches, and monitored through a comprehensive CLI.
+
+### Configuration
+
+Create a queue configuration in your application:
+
+```typescript
+import { QueueServiceProvider } from '@orchestr-sh/orchestr';
+
+app.register(new QueueServiceProvider(app));
+
+// Configure in ConfigServiceProvider
+{
+  queue: {
+    default: 'database',
+    connections: {
+      sync: {
+        driver: 'sync',
+      },
+      database: {
+        driver: 'database',
+        table: 'jobs',
+        queue: 'default',
+        retry_after: 90,
+        after_commit: false,
+      },
+    },
+    failed: {
+      driver: 'database',
+      database: 'sqlite',
+      table: 'failed_jobs',
+    },
+    batching: {
+      database: 'sqlite',
+      table: 'job_batches',
+    },
+  },
+}
+```
+
+### Creating Jobs
+
+Jobs are classes that extend the `Job` base class:
+
+```typescript
+import { Job } from '@orchestr-sh/orchestr';
+
+export class ProcessPodcast extends Job {
+  public tries = 5;
+  public timeout = 120;
+  public backoff = [10, 30, 60];
+
+  constructor(public podcastId: number) {
+    super();
+  }
+
+  async handle(): Promise<void> {
+    // Process the podcast
+    const podcast = await Podcast.find(this.podcastId);
+    await podcast.process();
+  }
+
+  async failed(error: Error): Promise<void> {
+    // Handle job failure
+    console.error(`Failed to process podcast ${this.podcastId}:`, error);
+  }
+}
+
+// Create via CLI
+npx orchestr make:job ProcessPodcast
+npx orchestr make:job SendEmail --sync  // Synchronous job
+```
+
+### Dispatching Jobs
+
+```typescript
+// Basic dispatch
+await ProcessPodcast.dispatch(podcastId);
+
+// Fluent dispatch API
+await ProcessPodcast.dispatch(podcastId)
+  .onQueue('high-priority')
+  .onConnection('redis')
+  .delay(60)
+  .tries(3)
+  .timeout(300)
+  .backoff([30, 60, 120]);
+
+// Conditional dispatch
+await ProcessPodcast.dispatchIf(podcast.needsProcessing, podcastId);
+await ProcessPodcast.dispatchUnless(podcast.isProcessed, podcastId);
+
+// Synchronous dispatch (runs immediately)
+await ProcessPodcast.dispatchSync(podcastId);
+
+// Using Queue/Bus facades
+import { Queue, Bus } from '@orchestr-sh/orchestr';
+
+await Queue.push(new ProcessPodcast(podcastId));
+await Queue.pushOn('high-priority', new ProcessPodcast(podcastId));
+await Queue.later(60, new ProcessPodcast(podcastId));
+
+await Bus.dispatch(new ProcessPodcast(podcastId));
+await Bus.dispatchSync(new ProcessPodcast(podcastId));
+```
+
+### Job Middleware
+
+Middleware can be applied to jobs for rate limiting, preventing overlaps, and throttling exceptions:
+
+```typescript
+import { RateLimited, WithoutOverlapping, ThrottlesExceptions } from '@orchestr-sh/orchestr';
+
+export class ProcessPodcast extends Job {
+  constructor(public podcastId: number) {
+    super();
+  }
+
+  middleware() {
+    return [
+      // Allow 10 jobs per minute
+      new RateLimited('podcasts', 10, 60).releaseAfter(30),
+
+      // Prevent overlapping jobs for the same podcast
+      new WithoutOverlapping(this.podcastId)
+        .releaseAfter(10)
+        .expireAfter(300),
+
+      // Throttle on too many exceptions
+      new ThrottlesExceptions(5, 10).backoff(5),
+    ];
+  }
+
+  async handle(): Promise<void> {
+    // Process podcast
+  }
+}
+```
+
+### Job Chaining
+
+Execute jobs sequentially - if one fails, the chain stops:
+
+```typescript
+import { Bus } from '@orchestr-sh/orchestr';
+
+await Bus.chain([
+  new ProcessPodcast(podcastId),
+  new OptimizePodcast(podcastId),
+  new PublishPodcast(podcastId),
+  new NotifySubscribers(podcastId),
+])
+  .onQueue('processing')
+  .onConnection('redis')
+  .delay(300)
+  .catch((error) => {
+    console.error('Chain failed:', error);
+  })
+  .dispatch();
+```
+
+### Job Batching
+
+Execute jobs concurrently with progress tracking:
+
+```typescript
+import { Bus } from '@orchestr-sh/orchestr';
+
+const batch = await Bus.batch([
+  new ImportRow(1),
+  new ImportRow(2),
+  new ImportRow(3),
+  new ImportRow(4),
+])
+  .name('CSV Import')
+  .then((batch) => {
+    console.log('All imports complete!');
+  })
+  .catch((batch, error) => {
+    console.error('A job failed:', error);
+  })
+  .finally((batch) => {
+    console.log(`Processed ${batch.processedJobs}/${batch.totalJobs} jobs`);
+  })
+  .allowFailures()
+  .onQueue('imports')
+  .dispatch();
+
+// Check batch progress
+console.log(`Progress: ${batch.progress()}%`);
+console.log(`Pending: ${batch.pendingJobs}`);
+console.log(`Failed: ${batch.failedJobs}`);
+```
+
+### Running Workers
+
+Process queued jobs with the worker daemon:
+
+```bash
+# Start a worker
+npx orchestr queue:work
+
+# Specify connection and queue
+npx orchestr queue:work database --queue=high-priority,default
+
+# Worker options
+npx orchestr queue:work database \
+  --queue=high,default \
+  --tries=3 \
+  --timeout=90 \
+  --sleep=3 \
+  --max-jobs=1000 \
+  --max-time=3600 \
+  --memory=128 \
+  --rest=0
+
+# Process a single job (--once)
+npx orchestr queue:work --once
+
+# Stop when queue is empty
+npx orchestr queue:work --stop-when-empty
+
+# Restart all workers gracefully
+npx orchestr queue:restart
+```
+
+### Failed Jobs
+
+Manage failed jobs through the CLI or programmatically:
+
+```bash
+# List all failed jobs
+npx orchestr queue:failed
+
+# Retry a specific failed job
+npx orchestr queue:retry 5
+
+# Retry all failed jobs
+npx orchestr queue:retry all
+
+# Forget (delete) a failed job
+npx orchestr queue:forget 5
+
+# Flush all failed jobs
+npx orchestr queue:flush
+
+# Prune failed jobs older than 48 hours
+npx orchestr queue:prune-failed --hours=48
+```
+
+### Queue Monitoring
+
+```bash
+# Monitor queue for jobs exceeding thresholds
+npx orchestr queue:monitor database:default --max=100
+
+# Clear all jobs from a queue
+npx orchestr queue:clear database --queue=default
+```
+
+### Database Setup
+
+```bash
+# Create queue tables migration
+npx orchestr queue:table
+
+# Create failed jobs table migration
+npx orchestr queue:failed-table
+
+# Create job batches table migration
+npx orchestr queue:batches-table
+
+# Run migrations
+npx orchestr migrate
+```
+
+### Job Events
+
+Register callbacks for job lifecycle events:
+
+```typescript
+import { Queue } from '@orchestr-sh/orchestr';
+
+// Before job processing
+Queue.before((connectionName, job) => {
+  console.log(`Processing: ${job.displayName()}`);
+});
+
+// After job processing
+Queue.after((connectionName, job) => {
+  console.log(`Completed: ${job.displayName()}`);
+});
+
+// When a job fails
+Queue.failing((connectionName, job, error) => {
+  console.error(`Failed: ${job.displayName()}`, error);
+});
+
+// On each worker loop iteration
+Queue.looping(() => {
+  // Perform maintenance tasks
+});
+```
+
+### Custom Queue Drivers
+
+Extend the queue system with custom drivers:
+
+```typescript
+import { QueueDriver } from '@orchestr-sh/orchestr';
+
+class RedisDriver implements QueueDriver {
+  async push(job: Job, queue?: string): Promise<string> {
+    // Push job to Redis
+  }
+
+  async pop(queue?: string): Promise<QueueDriverJob | null> {
+    // Pop job from Redis
+  }
+
+  // Implement other methods...
+}
+
+// Register the driver
+const manager = app.make<QueueManager>('queue');
+manager.registerDriver('redis', (config) => new RedisDriver(config));
+```
+
+## Cache System
+
+Orchestr provides a flexible caching system with multiple drivers, tags, locks, and stale-while-revalidate support.
+
+### Configuration
+
+Configure cache stores in your application:
+
+```typescript
+import { CacheServiceProvider } from '@orchestr-sh/orchestr';
+
+app.register(new CacheServiceProvider(app));
+
+// Configure in ConfigServiceProvider
+{
+  cache: {
+    default: 'file',
+    prefix: 'app_cache_',
+    stores: {
+      array: {
+        driver: 'array',
+        serialize: false,
+      },
+      file: {
+        driver: 'file',
+        path: 'storage/framework/cache/data',
+      },
+      database: {
+        driver: 'database',
+        connection: null,
+        table: 'cache',
+      },
+      null: {
+        driver: 'null',
+      },
+    },
+  },
+}
+```
+
+### Basic Usage
+
+```typescript
+import { Cache } from '@orchestr-sh/orchestr';
+
+// Store items
+await Cache.put('key', 'value', 3600); // TTL in seconds
+await Cache.put('key', 'value', new Date('2024-12-31')); // TTL as Date
+await Cache.forever('key', 'value'); // Store forever
+
+// Retrieve items
+const value = await Cache.get('key');
+const value = await Cache.get('key', 'default value');
+const value = await Cache.get('key', () => 'computed default');
+
+// Multiple items
+await Cache.putMany({ key1: 'value1', key2: 'value2' }, 3600);
+const values = await Cache.many(['key1', 'key2']);
+
+// Check existence
+if (await Cache.has('key')) {
+  // Key exists
+}
+
+if (await Cache.missing('key')) {
+  // Key does not exist
+}
+
+// Remove items
+await Cache.forget('key');
+await Cache.flush(); // Clear all cache
+
+// Retrieve and delete
+const value = await Cache.pull('key', 'default');
+```
+
+### Remember Pattern
+
+Cache the result of expensive operations:
+
+```typescript
+// Cache for 1 hour if not exists
+const user = await Cache.remember('user:1', 3600, async () => {
+  return await User.find(1);
+});
+
+// Cache forever if not exists
+const settings = await Cache.rememberForever('settings', async () => {
+  return await fetchSettings();
+});
+
+// Add only if key doesn't exist
+await Cache.add('key', 'value', 3600);
+```
+
+### Flexible Caching (Stale-While-Revalidate)
+
+Serve stale content while revalidating in the background:
+
+```typescript
+// Fresh for 30s, stale for up to 300s
+const data = await Cache.flexible('api:data', [30, 300], async () => {
+  return await fetchFromAPI();
+});
+
+// First 30 seconds: serves fresh data
+// After 30 seconds: serves stale data, triggers background refresh
+// After 300 seconds: fetches fresh data synchronously
+```
+
+### Incrementing and Decrementing
+
+```typescript
+// Increment
+await Cache.increment('views'); // +1
+await Cache.increment('views', 5); // +5
+
+// Decrement
+await Cache.decrement('views'); // -1
+await Cache.decrement('views', 3); // -3
+```
+
+### Multiple Stores
+
+Switch between different cache stores:
+
+```typescript
+// Use specific store
+await Cache.store('redis').put('key', 'value', 3600);
+await Cache.store('file').put('key', 'value', 3600);
+await Cache.store('database').put('key', 'value', 3600);
+
+// Chain operations
+const value = await Cache.store('redis').remember('expensive', 3600, async () => {
+  return await computeExpensiveValue();
+});
+```
+
+### Cache Tags
+
+Group related cache entries for easy invalidation:
+
+```typescript
+// Store tagged items
+await Cache.tags(['people', 'artists']).put('John', johnData, 3600);
+await Cache.tags(['people', 'authors']).put('Anne', anneData, 3600);
+await Cache.tags('products').put('product:1', productData, 3600);
+
+// Retrieve tagged items
+const john = await Cache.tags(['people', 'artists']).get('John');
+
+// Flush by tag (removes all tagged entries)
+await Cache.tags('people').flush(); // Removes John and Anne
+await Cache.tags(['people', 'artists']).flush();
+
+// Remember with tags
+const user = await Cache.tags(['users', 'premium']).remember('user:1', 3600, async () => {
+  return await User.find(1);
+});
+```
+
+### Cache Locks
+
+Atomic locks for preventing race conditions:
+
+```typescript
+// Basic lock usage
+const lock = Cache.lock('processing', 120);
+
+if (await lock.get()) {
+  try {
+    // Critical section
+    await processExpensiveOperation();
+  } finally {
+    await lock.release();
+  }
+}
+
+// Auto-release with callback
+await Cache.lock('processing', 120).get(async () => {
+  // Lock is automatically released after callback
+  await processExpensiveOperation();
+});
+
+// Block until lock is acquired
+try {
+  await Cache.lock('processing', 120).block(10, async () => {
+    // Wait up to 10 seconds for lock
+    await processExpensiveOperation();
+  });
+} catch (error) {
+  // LockTimeoutException after 10 seconds
+}
+
+// Check lock ownership
+const lock = Cache.lock('processing', 120);
+await lock.get();
+
+if (await lock.isOwnedByCurrentProcess()) {
+  await lock.release();
+}
+
+// Force release (ignores ownership)
+await lock.forceRelease();
+```
+
+### Database Setup
+
+```bash
+# Create cache table migration
+npx orchestr cache:table
+
+# Run migration
+npx orchestr migrate
+```
+
+### Cache Commands
+
+```bash
+# Clear all cache
+npx orchestr cache:clear
+
+# Clear specific store
+npx orchestr cache:clear --store=redis
+
+# Forget a specific key
+npx orchestr cache:forget key-name
+
+# Forget from specific store
+npx orchestr cache:forget key-name --store=redis
+```
+
+### Custom Cache Drivers
+
+Create custom cache drivers for Redis, Memcached, etc.:
+
+```typescript
+import { Store } from '@orchestr-sh/orchestr';
+
+class RedisStore implements Store {
+  async get(key: string): Promise<any> {
+    // Get from Redis
+  }
+
+  async put(key: string, value: any, seconds: number): Promise<boolean> {
+    // Put to Redis
+  }
+
+  // Implement other methods...
+}
+
+// Register the driver
+const manager = app.make<CacheManager>('cache');
+manager.registerDriver('redis', (config) => new RedisStore(config));
+```
+
+### Repository Methods
+
+The cache repository provides these methods:
+
+```typescript
+// Basic operations
+await Cache.get(key, defaultValue?)
+await Cache.many(keys)
+await Cache.put(key, value, ttl?)
+await Cache.putMany(values, ttl?)
+await Cache.forever(key, value)
+await Cache.forget(key)
+await Cache.flush()
+
+// High-level operations
+await Cache.has(key)
+await Cache.missing(key)
+await Cache.pull(key, defaultValue?)
+await Cache.add(key, value, ttl?)
+await Cache.remember(key, ttl, callback)
+await Cache.rememberForever(key, callback)
+await Cache.flexible(key, [freshTtl, staleTtl], callback)
+
+// Numeric operations
+await Cache.increment(key, value?)
+await Cache.decrement(key, value?)
+
+// Tags and locks
+Cache.tags(names)
+Cache.lock(name, seconds?, owner?)
+Cache.restoreLock(name, owner)
+
+// Store operations
+Cache.store(name?)
+Cache.getPrefix()
 ```
 
 ## Features
@@ -877,6 +1541,8 @@ npx orchestr event:clear                    # Clear event cache
 - ✅ Event Subscribers
 - ✅ Model Lifecycle Events
 - ✅ Event Testing (Fakes & Assertions)
+- ✅ Queue System (Jobs, Chains, Batches, Workers)
+- ✅ Cache System (Tags, Locks, Flexible Caching)
 - ✅ Soft Deletes
 - ✅ Attribute Casting
 - ✅ Timestamps
