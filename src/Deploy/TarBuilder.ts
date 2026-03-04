@@ -36,6 +36,7 @@ export class TarBuilder {
       'package-lock.json',
       'bun.lockb',
       'yarn.lock',
+      'tsconfig.json',
       'ecosystem.config.js',
       'ecosystem.config.cjs',
       'dist-entry.js',
