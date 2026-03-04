@@ -68,7 +68,7 @@ export class Deployer {
       run(`tar -xzf "${remoteTar}" -C "${releasePath}" && rm "${remoteTar}"`, 'Extracting');
 
       // 4. Install production dependencies
-      run(`cd "${releasePath}" && npm ci --omit=dev 2>&1`, 'Installing dependencies');
+      run(`cd "${releasePath}" && npm install --omit=dev --no-audit --no-fund 2>&1`, 'Installing dependencies');
 
       // 5. Link shared .env (if exists)
       run(`[ -f "${sharedEnvPath}" ] && ln -sf "${sharedEnvPath}" "${releasePath}/.env" || true`, 'Linking .env');
